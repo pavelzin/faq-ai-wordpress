@@ -86,6 +86,23 @@ Na podstawie artykułu o akcyzie na samochody, wtyczka wygeneruje:
 
 - `_wp_ai_faq` - przechowuje wygenerowane FAQ jako array
 
+## 🔒 Bezpieczeństwo (v1.7.1)
+
+Wersja 1.7.1 zawiera kompleksowe poprawki bezpieczeństwa:
+
+- **Brak hardcoded kluczy** - wymaga konfiguracji własnego klucza API
+- **Sanityzacja danych** - ochrona przed XSS w pytaniach i odpowiedziach FAQ
+- **Weryfikacja nonce** - ochrona przed CSRF dla wszystkich operacji AJAX
+- **Bezpieczne JSON-LD** - prawidłowe kodowanie z flagami bezpieczeństwa
+- **Sprawdzanie uprawnień** - tylko autoryzowani użytkownicy mogą generować FAQ
+- **Bezpieczne logowanie** - logi tylko w trybie debug, bez wrażliwych danych
+
+### Zalecenia przed produkcją
+
+1. Upewnij się że `WP_DEBUG` jest ustawione na `false`
+2. Skonfiguruj własny klucz API OpenAI
+3. Używaj HTTPS na stronie
+
 ## 🐛 Troubleshooting
 
 ### FAQ się nie generuje

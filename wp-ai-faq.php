@@ -2,15 +2,29 @@
 /*
 Plugin Name: WP AI FAQ Enhanced
 Description: Automatyczne generowanie FAQ z AI dla nowych postów + panel masowego generowania dla istniejących treści + edycja FAQ. Używa OpenAI do tworzenia pytań i odpowiedzi z JSON-LD dla SEO.
-Version: 1.7
+Version: 1.7.1
 Author: Paweł Zinkiewicz
+Text Domain: wp-ai-faq
 */
 if (!defined('ABSPATH')) exit;
+
+/**
+ * Bezpieczna funkcja logowania - tylko gdy WP_DEBUG jest włączony
+ * Chroni przed wyciekiem informacji na produkcji
+ */
+function wp_ai_faq_log($message) {
+    if (defined('WP_DEBUG') && WP_DEBUG) {
+        error_log('[WP AI FAQ] ' . $message);
+    }
+}
 
 add_action('save_post', 'wp_ai_faq_generate', 20, 2);
 
 function wp_ai_faq_generate($post_id, $post) {
     if (wp_is_post_revision($post_id) || $post->post_status !== 'publish') return;
+    
+    // Sprawdź uprawnienia użytkownika do edycji posta
+    if (!current_user_can('edit_post', $post_id)) return;
 
     // Sprawdź czy typ posta jest włączony
     $post_types_settings = get_option('wp_ai_faq_post_types', [
@@ -36,10 +50,13 @@ function wp_ai_faq_generate($post_id, $post) {
 }
 
 function wp_ai_faq_call_openai($content, $post_id = null) {
-    // Pobierz API key z ustawień lub użyj domyślnego
-    $custom_api_key = get_option('wp_ai_faq_api_key', '');
-    $default_api_key = 'YOUR_API_KEY_HERE';
-    $api_key = !empty($custom_api_key) ? $custom_api_key : $default_api_key;
+    // Pobierz API key z ustawień - WYMAGANY
+    $api_key = get_option('wp_ai_faq_api_key', '');
+    
+    // Sprawdź czy klucz API jest skonfigurowany
+    if (empty($api_key)) {
+        return ['error' => 'Klucz API OpenAI nie jest skonfigurowany. Przejdź do Ustawień AI FAQ i dodaj swój klucz API.'];
+    }
     $model = get_option('wp_ai_faq_model', 'gpt-4o-mini');
     
     // Wykryj język
@@ -66,7 +83,7 @@ TREŚĆ:
     // Zamień placeholder języka
     $prompt = str_replace('{LANGUAGE}', $language, $prompt);
     $prompt .= "\n\n" . $content;
-    error_log("FAQ DEBUG: OpenAI function called - API key length: " . strlen($api_key) . ", Model: " . $model);
+    wp_ai_faq_log("OpenAI function called - Model: " . $model);
     
     // Buduj request body - nowe modele (gpt-5*, gpt-4.1*, o1*, o3*) używają max_completion_tokens
     $request_body = [
@@ -100,26 +117,26 @@ TREŚĆ:
     ]);
 
     if (is_wp_error($response)) {
-        error_log('OpenAI FAQ Error: ' . $response->get_error_message());
+        wp_ai_faq_log('OpenAI Error: ' . $response->get_error_message());
         return ['error' => 'Connection error: ' . $response->get_error_message()];
     }
 
     $response_code = wp_remote_retrieve_response_code($response);
     if ($response_code !== 200) {
         $response_body = wp_remote_retrieve_body($response);
-        error_log('OpenAI FAQ HTTP Error ' . $response_code . ': ' . $response_body);
+        wp_ai_faq_log('OpenAI HTTP Error ' . $response_code);
         return ['error' => 'HTTP Error ' . $response_code . ': ' . $response_body];
     }
 
     $body = json_decode(wp_remote_retrieve_body($response), true);
     if (!$body) {
-        error_log('OpenAI FAQ Error: Empty response body');
+        wp_ai_faq_log('OpenAI Error: Empty response body');
         return ['error' => 'Empty response body from OpenAI'];
     }
     
     $raw = $body['choices'][0]['message']['content'] ?? '';
     if (empty($raw)) {
-        error_log('OpenAI FAQ Error: Empty content in response');
+        wp_ai_faq_log('OpenAI Error: Empty content in response');
         return ['error' => 'Empty content in OpenAI response'];
     }
 
@@ -140,12 +157,12 @@ TREŚĆ:
     // 3. Usuń invisible characters i whitespace z początku/końca
     $raw = trim($raw);
     
-    // 4. Loguj raw content dla debugowania (pierwsze 200 znaków)
-    error_log('FAQ DEBUG: Cleaned JSON (first 200 chars): ' . substr($raw, 0, 200));
+    // 4. Loguj raw content dla debugowania (tylko w trybie debug)
+    wp_ai_faq_log('Cleaned JSON (first 100 chars): ' . substr($raw, 0, 100));
 
     $faq = json_decode($raw, true);
     if (json_last_error() !== JSON_ERROR_NONE) {
-        error_log('OpenAI FAQ JSON Error: ' . json_last_error_msg() . ' | Raw content: ' . $raw);
+        wp_ai_faq_log('JSON Error: ' . json_last_error_msg());
         return ['error' => 'JSON parsing error: ' . json_last_error_msg()];
     }
     
@@ -190,7 +207,7 @@ function wp_ai_faq_display($content) {
             
             // Tryb: tylko JSON-LD (bez wyświetlania na froncie)
             if ($display_mode === 'json_only') {
-                $content .= '<script type="application/ld+json">'.json_encode($json_ld).'</script>';
+                $content .= '<script type="application/ld+json">'.wp_json_encode($json_ld, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE).'</script>';
             } 
             // Tryb: front + JSON-LD (wyświetlanie FAQ + schema)
             else {
@@ -202,7 +219,7 @@ function wp_ai_faq_display($content) {
                     $faq_html .= "<div class='faq-item'><strong>$q</strong><p>$a</p></div>";
                 }
                 
-                $faq_html .= '<script type="application/ld+json">'.json_encode($json_ld).'</script>';
+                $faq_html .= '<script type="application/ld+json">'.wp_json_encode($json_ld, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE).'</script>';
                 $faq_html .= '</div>';
                 $content .= $faq_html;
             }
@@ -329,10 +346,11 @@ function wp_ai_faq_get_openai_models() {
         return $cached_models;
     }
     
-    // Pobierz API key
-    $custom_api_key = get_option('wp_ai_faq_api_key', '');
-    $default_api_key = 'YOUR_API_KEY_HERE';
-    $api_key = !empty($custom_api_key) ? $custom_api_key : $default_api_key;
+    // Pobierz API key - jeśli brak, zwróć domyślne modele
+    $api_key = get_option('wp_ai_faq_api_key', '');
+    if (empty($api_key)) {
+        return wp_ai_faq_get_default_models();
+    }
     
     // Pobierz modele z API
     $response = wp_remote_get('https://api.openai.com/v1/models', [
@@ -528,7 +546,8 @@ function wp_ai_faq_get_default_models() {
 add_action('wp_ajax_wp_ai_faq_refresh_models', 'wp_ai_faq_ajax_refresh_models');
 
 function wp_ai_faq_ajax_refresh_models() {
-    if (!current_user_can('manage_options')) {
+    // Weryfikacja uprawnień i nonce (ochrona przed CSRF)
+    if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'wp_ai_faq_settings')) {
         wp_send_json_error('Brak uprawnień');
     }
     
@@ -545,8 +564,8 @@ function wp_ai_faq_ajax_refresh_models() {
 // Strona ustawień
 function wp_ai_faq_settings_page() {
     if (isset($_POST['submit']) && wp_verify_nonce($_POST['_wpnonce'], 'wp_ai_faq_settings')) {
-        error_log("FAQ DEBUG SAVE: Saving API key, length: " . strlen($_POST['wp_ai_faq_api_key']) . ", trimmed length: " . strlen(trim($_POST['wp_ai_faq_api_key'])));
-        update_option('wp_ai_faq_api_key', trim($_POST['wp_ai_faq_api_key']));
+        wp_ai_faq_log("Saving settings");
+        update_option('wp_ai_faq_api_key', sanitize_text_field($_POST['wp_ai_faq_api_key']));
         update_option('wp_ai_faq_model', sanitize_text_field($_POST['wp_ai_faq_model']));
         update_option('wp_ai_faq_prompt', wp_unslash(sanitize_textarea_field($_POST['wp_ai_faq_prompt'])));
         update_option('wp_ai_faq_language', sanitize_text_field($_POST['wp_ai_faq_language']));
@@ -740,6 +759,7 @@ TREŚĆ:
                         
                         const data = new FormData();
                         data.append('action', 'wp_ai_faq_refresh_models');
+                        data.append('nonce', '<?php echo wp_create_nonce('wp_ai_faq_settings'); ?>');
                         
                         fetch('<?php echo admin_url('admin-ajax.php'); ?>', {
                             method: 'POST',
@@ -1410,13 +1430,11 @@ function wp_ai_faq_admin_scripts($hook) {
         return;
     }
     
-    // Localize script for AJAX
-    wp_add_inline_script('jquery', '
-        var wpAiFaq = {
-            ajax_url: "' . admin_url('admin-ajax.php') . '",
-            nonce: "' . wp_create_nonce('bulk_faq_generate') . '"
-        };
-    ');
+    // Localize script for AJAX - bezpieczny sposób przekazywania danych do JS
+    wp_localize_script('jquery', 'wpAiFaq', [
+        'ajax_url' => admin_url('admin-ajax.php'),
+        'nonce' => wp_create_nonce('bulk_faq_generate')
+    ]);
 }
 
 
@@ -1426,7 +1444,7 @@ add_action('wp_ajax_wp_ai_faq_get_faq', 'wp_ai_faq_ajax_get_faq');
 add_action('wp_ajax_wp_ai_faq_save_faq', 'wp_ai_faq_ajax_save_faq');
 
 function wp_ai_faq_ajax_bulk_generate() {
-    error_log("FAQ DEBUG: AJAX bulk generate called");
+    wp_ai_faq_log("AJAX bulk generate called");
     
     if (!current_user_can('manage_options') || !wp_verify_nonce($_POST['nonce'], 'bulk_faq_generate')) {
         wp_die('Brak uprawnień');
@@ -1434,7 +1452,7 @@ function wp_ai_faq_ajax_bulk_generate() {
     
     $post_id = isset($_POST["post_id"]) ? intval($_POST["post_id"]) : 0;
     $current = isset($_POST["current"]) ? intval($_POST["current"]) : 1;
-    error_log("FAQ DEBUG: Processing post ID: " . $post_id);
+    wp_ai_faq_log("Processing post ID: " . $post_id);
     $total = isset($_POST["total"]) ? intval($_POST["total"]) : 1;
     
     if (!$post_id) {
@@ -1482,11 +1500,11 @@ function wp_ai_faq_ajax_bulk_generate() {
         ]);
     }
     
-    error_log("FAQ DEBUG: About to call OpenAI with content length: " . strlen($content));
+    wp_ai_faq_log("Calling OpenAI for post ID: " . $post_id);
     $faq = wp_ai_faq_call_openai($content, $post_id);
     if ($faq && is_array($faq) && !isset($faq['error'])) {
         update_post_meta($post_id, '_wp_ai_faq', $faq);
-    error_log("FAQ DEBUG: OpenAI returned: " . ($faq ? "SUCCESS (" . count($faq) . " items)" : "FAILED"));
+    wp_ai_faq_log("OpenAI returned: " . ($faq && is_array($faq) && !isset($faq['error']) ? "SUCCESS (" . count($faq) . " items)" : "FAILED"));
         wp_send_json_success([
             'post_id' => $post_id,
             'title' => $post_title,
@@ -1553,16 +1571,23 @@ function wp_ai_faq_ajax_save_faq() {
         wp_send_json_error('FAQ musi zawierać przynajmniej jedno pytanie');
     }
     
-    // Walidacja danych
+    // Walidacja i sanityzacja danych
+    $sanitized_faq = [];
     foreach ($faq as $item) {
         if (!isset($item['question']) || !isset($item['answer']) || 
             empty(trim($item['question'])) || empty(trim($item['answer']))) {
             wp_send_json_error('Każde pytanie musi mieć treść i odpowiedź');
         }
+        
+        // Sanityzacja danych przed zapisem - ochrona przed XSS
+        $sanitized_faq[] = [
+            'question' => sanitize_text_field($item['question']),
+            'answer' => wp_kses_post($item['answer'])
+        ];
     }
     
-    // Zapisz FAQ
-    $result = update_post_meta($post_id, '_wp_ai_faq', $faq);
+    // Zapisz FAQ (po sanityzacji)
+    $result = update_post_meta($post_id, '_wp_ai_faq', $sanitized_faq);
     if ($result !== false) {
         wp_send_json_success('FAQ zostało zapisane');
     } else {

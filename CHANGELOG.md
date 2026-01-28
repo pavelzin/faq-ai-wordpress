@@ -5,6 +5,22 @@ Wszystkie istotne zmiany w projekcie będą dokumentowane w tym pliku.
 Format bazuje na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 a wersjonowanie zgodne z [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.1] - 2026-01-28
+
+### Bezpieczeństwo
+- **KRYTYCZNE**: Usunięty hardcoded klucz API OpenAI - wymaga teraz konfiguracji własnego klucza
+- Dodana sanityzacja danych FAQ (`sanitize_text_field()` dla pytań, `wp_kses_post()` dla odpowiedzi)
+- Dodana weryfikacja nonce dla wszystkich endpointów AJAX (ochrona przed CSRF)
+- Naprawione kodowanie JSON-LD z flagami bezpieczeństwa (`JSON_HEX_TAG`, `JSON_HEX_AMP`, etc.)
+- Zabezpieczone logowanie - działa tylko gdy `WP_DEBUG` jest włączony
+- Dodane sprawdzanie uprawnień użytkownika (`current_user_can()`) przy generowaniu FAQ
+- Sanityzacja klucza API przy zapisie (`sanitize_text_field()`)
+- Zamienione `wp_add_inline_script()` na bezpieczniejsze `wp_localize_script()`
+
+### Zmienione
+- Funkcja logowania `wp_ai_faq_log()` zamiast bezpośrednich wywołań `error_log()`
+- Logi nie zawierają już wrażliwych danych (długość klucza API, surowe odpowiedzi)
+
 ## [1.7.0] - 2026-01-28
 
 ### Dodane
