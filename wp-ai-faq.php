@@ -2,7 +2,7 @@
 /*
 Plugin Name: WP AI FAQ Enhanced
 Description: Automatyczne generowanie FAQ z AI dla nowych postów + panel masowego generowania dla istniejących treści + edycja FAQ. Używa OpenAI do tworzenia pytań i odpowiedzi z JSON-LD dla SEO.
-Version: 1.7.1
+Version: 1.8.0
 Author: Paweł Zinkiewicz
 Text Domain: wp-ai-faq
 */
@@ -855,40 +855,89 @@ function wp_ai_faq_admin_page() {
         $enabled_post_types = ['post', 'page'];
     }
     
-    // Pobierz posty tylko z włączonych typów
+    // Pobierz aktywną zakładkę (typ posta) i stronę
+    $current_tab = isset($_GET['post_type_tab']) ? sanitize_key($_GET['post_type_tab']) : 'all';
+    $current_page = isset($_GET['paged']) ? max(1, intval($_GET['paged'])) : 1;
+    $per_page = 25;
+    
+    // Pobierz statystyki dla każdego typu posta (dla zakładek)
+    $post_type_counts = [];
+    $total_all = 0;
+    foreach ($enabled_post_types as $pt) {
+        $count = wp_count_posts($pt);
+        $post_type_counts[$pt] = isset($count->publish) ? $count->publish : 0;
+        $total_all += $post_type_counts[$pt];
+    }
+    
+    // Pobierz obiekty typów postów dla nazw
+    $post_type_objects = get_post_types(['public' => true], 'objects');
+    
+    // Określ który typ posta pobierać
+    $query_post_types = ($current_tab === 'all') ? $enabled_post_types : [$current_tab];
+    
+    // Policz wszystkie posty dla paginacji
+    $total_posts = 0;
+    if ($current_tab === 'all') {
+        $total_posts = $total_all;
+    } else {
+        $total_posts = isset($post_type_counts[$current_tab]) ? $post_type_counts[$current_tab] : 0;
+    }
+    
+    $total_pages = ceil($total_posts / $per_page);
+    $offset = ($current_page - 1) * $per_page;
+    
+    // Pobierz posty z paginacją
     $posts = get_posts([
-        'post_type' => $enabled_post_types,
+        'post_type' => $query_post_types,
         'post_status' => 'publish',
-        'numberposts' => -1,
+        'numberposts' => $per_page,
+        'offset' => $offset,
         'orderby' => 'date',
         'order' => 'DESC'
     ]);
     
+    // Buduj bazowy URL dla linków
+    $base_url = admin_url('admin.php?page=wp-ai-faq');
+    
     ?>
 <div class="wrap">
-        <h1>🤖 AI FAQ v1.6 + Edycja</h1>
+        <h1>🤖 AI FAQ v1.7.1</h1>
         
-        <div class="card">
+        <div class="card" style="margin-bottom: 20px;">
             <h2>💡 Jak to działa</h2>
             <ul>
                 <li><strong>Automatyczne:</strong> Nowe posty otrzymują FAQ automatycznie przy publikacji</li>
                 <li><strong>Masowe:</strong> Zaznacz istniejące posty poniżej i wygeneruj FAQ hurtowo</li>
                 <li><strong>Edycja:</strong> Kliknij "Edytuj FAQ" aby zmienić pytania i odpowiedzi</li>
                 <li><strong>Wymagania:</strong> Post musi mieć minimum 300 znaków treści</li>
-                <li><strong>Typy postów:</strong> W <a href="<?php echo admin_url('admin.php?page=wp-ai-faq-settings'); ?>">Ustawieniach</a> możesz wybrać na których typach postów ma działać FAQ</li>
-                <li><strong>Tryby wyświetlania:</strong>
-                    <ul style="margin-top: 5px; margin-left: 20px;">
-                        <li>📄 <strong>Front + JSON-LD</strong> - FAQ widoczne na stronie + schema SEO</li>
-                        <li>🔍 <strong>Tylko JSON-LD</strong> - FAQ niewidoczne dla użytkowników, tylko schema SEO dla wyszukiwarek</li>
-                    </ul>
-                </li>
             </ul>
         </div>
         
+        <!-- Zakładki typów postów -->
+        <nav class="nav-tab-wrapper" style="margin-bottom: 0;">
+            <a href="<?php echo esc_url(add_query_arg(['post_type_tab' => 'all', 'paged' => 1], $base_url)); ?>" 
+               class="nav-tab <?php echo $current_tab === 'all' ? 'nav-tab-active' : ''; ?>">
+                📋 Wszystkie <span class="count">(<?php echo number_format($total_all); ?>)</span>
+            </a>
+            <?php foreach ($enabled_post_types as $pt): 
+                $pt_object = isset($post_type_objects[$pt]) ? $post_type_objects[$pt] : null;
+                $pt_name = $pt_object ? $pt_object->labels->name : ucfirst($pt);
+                $pt_icon = ($pt === 'post') ? '📝' : (($pt === 'page') ? '📄' : '📦');
+            ?>
+            <a href="<?php echo esc_url(add_query_arg(['post_type_tab' => $pt, 'paged' => 1], $base_url)); ?>" 
+               class="nav-tab <?php echo $current_tab === $pt ? 'nav-tab-active' : ''; ?>">
+                <?php echo $pt_icon . ' ' . esc_html($pt_name); ?> 
+                <span class="count">(<?php echo number_format($post_type_counts[$pt]); ?>)</span>
+            </a>
+            <?php endforeach; ?>
+        </nav>
+        
         <form method="post" id="bulk-faq-form">
             <?php wp_nonce_field('bulk_faq_generate'); ?>
+            <input type="hidden" name="post_type_tab" value="<?php echo esc_attr($current_tab); ?>">
+            <input type="hidden" name="paged" value="<?php echo esc_attr($current_page); ?>">
             
-            <div class="tablenav top">
+            <div class="tablenav top" style="margin-top: 0; padding-top: 15px; background: #f9f9f9; border: 1px solid #ccc; border-top: none; padding: 10px 15px;">
                 <div class="alignleft actions">
                     <button type="submit" name="generate_faq" class="button button-primary">
                         🚀 Generuj FAQ dla zaznaczonych
@@ -897,24 +946,38 @@ function wp_ai_faq_admin_page() {
                         🗑️ Usuń FAQ z zaznaczonych
                     </button>
                 </div>
-                <div class="alignright">
-                    <label><input type="checkbox" id="select-all"> Zaznacz wszystkie</label>
+                <div class="alignright" style="margin-top: 5px;">
+                    <span style="margin-right: 15px; color: #666;">
+                        Strona <?php echo $current_page; ?> z <?php echo max(1, $total_pages); ?> 
+                        (<?php echo number_format($total_posts); ?> pozycji)
+                    </span>
+                    <label><input type="checkbox" id="select-all"> Zaznacz wszystkie na tej stronie</label>
                 </div>
+                <br class="clear">
             </div>
             
-            <table class="wp-list-table widefat fixed striped">
+            <table class="wp-list-table widefat fixed striped" style="border-top: none;">
                 <thead>
                     <tr>
                         <td class="manage-column column-cb check-column"><input type="checkbox"></td>
                         <th>Tytuł</th>
-                        <th>Typ</th>
-                        <th>Tryb wyświetlania</th>
-                        <th>Status FAQ</th>
-                        <th>Długość treści</th>
-                        <th>Akcje</th>
+                        <?php if ($current_tab === 'all'): ?>
+                        <th style="width: 100px;">Typ</th>
+                        <?php endif; ?>
+                        <th style="width: 130px;">Tryb wyświetlania</th>
+                        <th style="width: 120px;">Status FAQ</th>
+                        <th style="width: 100px;">Długość</th>
+                        <th style="width: 100px;">Akcje</th>
                     </tr>
                 </thead>
                 <tbody>
+                    <?php if (empty($posts)): ?>
+                    <tr>
+                        <td colspan="<?php echo $current_tab === 'all' ? '7' : '6'; ?>" style="text-align: center; padding: 20px;">
+                            <em>Brak postów do wyświetlenia.</em>
+                        </td>
+                    </tr>
+                    <?php else: ?>
                     <?php foreach ($posts as $post): 
                         $content_length = strlen(strip_tags($post->post_content));
                         $has_faq = get_post_meta($post->ID, '_wp_ai_faq', true);
@@ -934,27 +997,34 @@ function wp_ai_faq_admin_page() {
                                 <?php echo esc_html($post->post_title); ?>
                             </a></strong>
                         </td>
-                        <td><?php echo ucfirst($post->post_type); ?></td>
+                        <?php if ($current_tab === 'all'): ?>
+                        <td>
+                            <?php 
+                            $pt_obj = isset($post_type_objects[$post->post_type]) ? $post_type_objects[$post->post_type] : null;
+                            echo $pt_obj ? esc_html($pt_obj->labels->singular_name) : ucfirst($post->post_type); 
+                            ?>
+                        </td>
+                        <?php endif; ?>
                         <td>
                             <?php if ($display_mode === 'json_only'): ?>
-                                <span style="color: #0073aa;" title="Tylko JSON-LD dla SEO, niewidoczne na froncie">🔍 Tylko JSON-LD</span>
+                                <span style="color: #0073aa;" title="Tylko JSON-LD dla SEO, niewidoczne na froncie">🔍 JSON-LD</span>
                             <?php else: ?>
-                                <span style="color: #46b450;" title="Widoczne FAQ + JSON-LD dla SEO">📄 Front + JSON</span>
+                                <span style="color: #46b450;" title="Widoczne FAQ + JSON-LD dla SEO">📄 Front+JSON</span>
                             <?php endif; ?>
                         </td>
                         <td>
                             <?php if ($has_faq && $faq_count > 0): ?>
                                 ✅ <strong><?php echo $faq_count; ?> pytań</strong>
                             <?php elseif ($content_length < 300): ?>
-                                ⚠️ Za krótki tekst
+                                <span style="color: orange;">⚠️ Za krótki</span>
                             <?php else: ?>
                                 ❌ Brak FAQ
                             <?php endif; ?>
                         </td>
                         <td>
-                            <?php echo number_format($content_length); ?> znaków
+                            <?php echo number_format($content_length); ?>
                             <?php if ($content_length < 300): ?>
-                                <br><small style="color: orange;">Min. 300 znaków</small>
+                                <br><small style="color: orange;">min. 300</small>
                             <?php endif; ?>
                         </td>
                         <td>
@@ -962,7 +1032,7 @@ function wp_ai_faq_admin_page() {
                                 <button type="button" class="button button-small edit-faq-btn" 
                                         data-post-id="<?php echo $post->ID; ?>" 
                                         data-post-title="<?php echo esc_attr($post->post_title); ?>">
-                                    ✏️ Edytuj FAQ
+                                    ✏️ Edytuj
                                 </button>
                             <?php else: ?>
                                 <span style="color: #666;">—</span>
@@ -970,8 +1040,45 @@ function wp_ai_faq_admin_page() {
                         </td>
                     </tr>
                     <?php endforeach; ?>
+                    <?php endif; ?>
                 </tbody>
             </table>
+            
+            <!-- Paginacja -->
+            <?php if ($total_pages > 1): ?>
+            <div class="tablenav bottom">
+                <div class="tablenav-pages">
+                    <span class="displaying-num"><?php echo number_format($total_posts); ?> pozycji</span>
+                    <span class="pagination-links">
+                        <?php
+                        // Pierwszy
+                        if ($current_page > 1) {
+                            echo '<a class="first-page button" href="' . esc_url(add_query_arg(['post_type_tab' => $current_tab, 'paged' => 1], $base_url)) . '">«</a> ';
+                            echo '<a class="prev-page button" href="' . esc_url(add_query_arg(['post_type_tab' => $current_tab, 'paged' => $current_page - 1], $base_url)) . '">‹</a> ';
+                        } else {
+                            echo '<span class="tablenav-pages-navspan button disabled">«</span> ';
+                            echo '<span class="tablenav-pages-navspan button disabled">‹</span> ';
+                        }
+                        
+                        // Aktualna strona
+                        echo '<span class="paging-input">';
+                        echo '<span class="tablenav-paging-text">' . $current_page . ' z <span class="total-pages">' . $total_pages . '</span></span>';
+                        echo '</span> ';
+                        
+                        // Następny / Ostatni
+                        if ($current_page < $total_pages) {
+                            echo '<a class="next-page button" href="' . esc_url(add_query_arg(['post_type_tab' => $current_tab, 'paged' => $current_page + 1], $base_url)) . '">›</a> ';
+                            echo '<a class="last-page button" href="' . esc_url(add_query_arg(['post_type_tab' => $current_tab, 'paged' => $total_pages], $base_url)) . '">»</a>';
+                        } else {
+                            echo '<span class="tablenav-pages-navspan button disabled">›</span> ';
+                            echo '<span class="tablenav-pages-navspan button disabled">»</span>';
+                        }
+                        ?>
+                    </span>
+                </div>
+                <br class="clear">
+            </div>
+            <?php endif; ?>
         </form>
         
         <!-- Modal do edycji FAQ -->

@@ -5,6 +5,23 @@ Wszystkie istotne zmiany w projekcie będą dokumentowane w tym pliku.
 Format bazuje na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 a wersjonowanie zgodne z [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.0] - 2026-01-28
+
+### Dodane
+- **Zakładki typów postów** - szybkie przełączanie między Post, Page, Custom Post Types
+- **Paginacja** - 25 postów na stronę dla lepszej wydajności przy dużej ilości treści
+- **Liczniki w zakładkach** - widoczna ilość postów każdego typu
+- **Zakładka "Wszystkie"** - podgląd wszystkich włączonych typów naraz
+
+### Zmienione
+- Panel administracyjny zoptymalizowany pod kątem wydajności
+- Lepsza organizacja interfejsu z nawigacją zakładkową
+- Skrócone etykiety w tabeli dla lepszej czytelności
+
+### Poprawione
+- Wydajność przy dużej liczbie postów (brak ładowania wszystkich naraz)
+- UX - łatwiejsze zarządzanie FAQ dla różnych typów treści
+
 ## [1.7.1] - 2026-01-28
 
 ### Bezpieczeństwo
