@@ -2,7 +2,7 @@
 /*
 Plugin Name: WP AI FAQ Enhanced
 Description: Automatyczne generowanie FAQ z AI dla nowych postów + panel masowego generowania dla istniejących treści + edycja FAQ. Używa OpenAI do tworzenia pytań i odpowiedzi z JSON-LD dla SEO.
-Version: 1.8.0
+Version: 1.8.1
 Author: Paweł Zinkiewicz
 Text Domain: wp-ai-faq
 */
@@ -16,6 +16,30 @@ function wp_ai_faq_log($message) {
     if (defined('WP_DEBUG') && WP_DEBUG) {
         error_log('[WP AI FAQ] ' . $message);
     }
+}
+
+/**
+ * WPML: Wyłącz synchronizację meta _wp_ai_faq między tłumaczeniami
+ * Każda wersja językowa powinna mieć własne FAQ
+ */
+add_filter('wpml_sync_custom_field_excluded', 'wp_ai_faq_exclude_meta_sync', 10, 2);
+function wp_ai_faq_exclude_meta_sync($excluded, $custom_field) {
+    if ($custom_field === '_wp_ai_faq') {
+        return true; // Nie synchronizuj tego meta
+    }
+    return $excluded;
+}
+
+/**
+ * Polylang: Wyłącz kopiowanie meta _wp_ai_faq przy tłumaczeniu
+ */
+add_filter('pll_copy_post_metas', 'wp_ai_faq_polylang_exclude_meta', 10, 4);
+function wp_ai_faq_polylang_exclude_meta($metas, $sync, $from, $to) {
+    $key = array_search('_wp_ai_faq', $metas);
+    if ($key !== false) {
+        unset($metas[$key]);
+    }
+    return $metas;
 }
 
 add_action('save_post', 'wp_ai_faq_generate', 20, 2);
@@ -960,6 +984,7 @@ function wp_ai_faq_admin_page() {
                 <thead>
                     <tr>
                         <td class="manage-column column-cb check-column"><input type="checkbox"></td>
+                        <th style="width: 50px;">ID</th>
                         <th>Tytuł</th>
                         <?php if ($current_tab === 'all'): ?>
                         <th style="width: 100px;">Typ</th>
@@ -973,7 +998,7 @@ function wp_ai_faq_admin_page() {
                 <tbody>
                     <?php if (empty($posts)): ?>
                     <tr>
-                        <td colspan="<?php echo $current_tab === 'all' ? '7' : '6'; ?>" style="text-align: center; padding: 20px;">
+                        <td colspan="<?php echo $current_tab === 'all' ? '8' : '7'; ?>" style="text-align: center; padding: 20px;">
                             <em>Brak postów do wyświetlenia.</em>
                         </td>
                     </tr>
@@ -992,6 +1017,9 @@ function wp_ai_faq_admin_page() {
                         <th scope="row" class="check-column">
                             <input type="checkbox" name="post_ids[]" value="<?php echo $post->ID; ?>" <?php echo $content_length < 300 ? 'disabled' : ''; ?>>
                         </th>
+                        <td style="color: #666; font-size: 12px;">
+                            <?php echo $post->ID; ?>
+                        </td>
                         <td>
                             <strong><a href="<?php echo get_edit_post_link($post->ID); ?>" target="_blank">
                                 <?php echo esc_html($post->post_title); ?>

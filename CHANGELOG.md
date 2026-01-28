@@ -5,6 +5,16 @@ Wszystkie istotne zmiany w projekcie będą dokumentowane w tym pliku.
 Format bazuje na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 a wersjonowanie zgodne z [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.8.1] - 2026-01-28
+
+### Poprawione
+- **WPML/Polylang: osobne FAQ dla każdej wersji językowej** - meta `_wp_ai_faq` nie jest już synchronizowane między tłumaczeniami
+- Dodana kolumna ID w tabeli dla łatwiejszej identyfikacji postów
+
+### Dodane
+- Filtr `wpml_sync_custom_field_excluded` - blokuje synchronizację meta FAQ w WPML
+- Filtr `pll_copy_post_metas` - blokuje kopiowanie meta FAQ w Polylang
+
 ## [1.8.0] - 2026-01-28
 
 ### Dodane
