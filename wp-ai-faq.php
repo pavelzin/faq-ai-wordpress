@@ -2,7 +2,7 @@
 /*
 Plugin Name: WP AI FAQ Enhanced
 Description: Automatyczne generowanie FAQ z AI dla nowych postów + panel masowego generowania dla istniejących treści + edycja FAQ. Używa OpenAI do tworzenia pytań i odpowiedzi z JSON-LD dla SEO.
-Version: 1.8.1
+Version: 1.8.2
 Author: Paweł Zinkiewicz
 Text Domain: wp-ai-faq
 */
@@ -980,11 +980,18 @@ function wp_ai_faq_admin_page() {
                 <br class="clear">
             </div>
             
+            <?php 
+                // Sprawdź czy WPML/Polylang jest aktywny
+                $has_multilang = function_exists('wpml_get_language_information') || function_exists('pll_get_post_language');
+                ?>
             <table class="wp-list-table widefat fixed striped" style="border-top: none;">
                 <thead>
                     <tr>
                         <td class="manage-column column-cb check-column"><input type="checkbox"></td>
                         <th style="width: 50px;">ID</th>
+                        <?php if ($has_multilang): ?>
+                        <th style="width: 40px;">Lang</th>
+                        <?php endif; ?>
                         <th>Tytuł</th>
                         <?php if ($current_tab === 'all'): ?>
                         <th style="width: 100px;">Typ</th>
@@ -996,9 +1003,15 @@ function wp_ai_faq_admin_page() {
                     </tr>
                 </thead>
                 <tbody>
+                    <?php 
+                    // Oblicz colspan
+                    $colspan = 7;
+                    if ($current_tab === 'all') $colspan++;
+                    if ($has_multilang) $colspan++;
+                    ?>
                     <?php if (empty($posts)): ?>
                     <tr>
-                        <td colspan="<?php echo $current_tab === 'all' ? '8' : '7'; ?>" style="text-align: center; padding: 20px;">
+                        <td colspan="<?php echo $colspan; ?>" style="text-align: center; padding: 20px;">
                             <em>Brak postów do wyświetlenia.</em>
                         </td>
                     </tr>
@@ -1007,6 +1020,15 @@ function wp_ai_faq_admin_page() {
                         $content_length = strlen(strip_tags($post->post_content));
                         $has_faq = get_post_meta($post->ID, '_wp_ai_faq', true);
                         $faq_count = $has_faq && is_array($has_faq) && !isset($has_faq['error']) ? count($has_faq) : 0;
+                        
+                        // Pobierz język posta (WPML/Polylang)
+                        $post_lang = '';
+                        if (function_exists('wpml_get_language_information')) {
+                            $lang_info = wpml_get_language_information(null, $post->ID);
+                            $post_lang = isset($lang_info['language_code']) ? strtoupper($lang_info['language_code']) : '';
+                        } elseif (function_exists('pll_get_post_language')) {
+                            $post_lang = strtoupper(pll_get_post_language($post->ID, 'slug'));
+                        }
                         
                         // Pobierz tryb wyświetlania dla tego typu posta
                         $display_mode = isset($post_types_settings[$post->post_type]['display_mode']) 
@@ -1020,6 +1042,11 @@ function wp_ai_faq_admin_page() {
                         <td style="color: #666; font-size: 12px;">
                             <?php echo $post->ID; ?>
                         </td>
+                        <?php if ($has_multilang): ?>
+                        <td style="font-size: 11px; font-weight: bold; color: <?php echo $post_lang === 'PL' ? '#d63638' : '#2271b1'; ?>;">
+                            <?php echo esc_html($post_lang); ?>
+                        </td>
+                        <?php endif; ?>
                         <td>
                             <strong><a href="<?php echo get_edit_post_link($post->ID); ?>" target="_blank">
                                 <?php echo esc_html($post->post_title); ?>
