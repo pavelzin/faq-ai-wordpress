@@ -5,14 +5,11 @@ Wszystkie istotne zmiany w projekcie będą dokumentowane w tym pliku.
 Format bazuje na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 a wersjonowanie zgodne z [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.8.2] - 2026-01-28
+## [1.8.3] - 2026-01-28
 
-### Dodane
-- **Kolumna "Lang"** - wyświetla kod języka posta (PL/EN) gdy WPML/Polylang jest aktywny
-- Lepsza diagnostyka problemu z synchronizacją FAQ między tłumaczeniami
-
-### Zmienione
-- Dynamiczny colspan w tabeli (obsługuje różne kombinacje kolumn)
+### Poprawione
+- **FIX: WPML fallback** - FAQ jest teraz pobierane bezpośrednio z bazy danych, omijając filtry WPML które powodowały że tłumaczenia "dziedziczyły" FAQ z oryginalnego posta
+- Nowa funkcja `wp_ai_faq_get_faq()` - bezpośrednie zapytanie do `wp_postmeta` bez fallbacku
 
 ## [1.8.1] - 2026-01-28
 
