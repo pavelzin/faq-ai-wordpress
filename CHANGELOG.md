@@ -5,6 +5,37 @@ Wszystkie istotne zmiany w projekcie będą dokumentowane w tym pliku.
 Format bazuje na [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 a wersjonowanie zgodne z [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-01-28
+
+### Dodane
+- **Wybór typów postów** - możliwość włączenia/wyłączenia FAQ dla dowolnych custom post types
+- **Tryby wyświetlania** - "Front + JSON-LD" lub "Tylko JSON-LD" (ukryte FAQ, tylko schema SEO)
+- **Dynamiczna lista modeli OpenAI** - pobierana automatycznie z API, cache 24h
+- **Obsługa nowych modeli** - GPT-5, GPT-5.2, GPT-4.1, O1, O3 (max_completion_tokens)
+- **Wykrywanie języka** - auto z locale WP, auto z WPML/Polylang, lub ręczny wybór
+- **Ustawienie języka FAQ** - wymusza język odpowiedzi niezależnie od treści
+- **Przycisk "Odśwież listę modeli"** - ręczne odświeżanie listy z API
+- **Panel masowego generowania** - generowanie FAQ dla wielu postów z progress bar
+- **Edycja FAQ** - modal do edycji wygenerowanych pytań i odpowiedzi
+- **Kolumna "Tryb wyświetlania"** w tabeli postów
+
+### Zmienione
+- Zwiększony limit tokenów do 3000
+- Timeout zwiększony do 60s dla modeli reasoning
+- Prompt zaktualizowany o instrukcję języka ({LANGUAGE} placeholder)
+- Sortowanie modeli - najnowsze (GPT-5.2) na górze
+
+### Poprawione
+- Obsługa `max_completion_tokens` dla nowych modeli OpenAI (zamiast `max_tokens`)
+- Integracja z WPML i Polylang dla wielojęzycznych stron
+- Walidacja FAQ przed wyświetleniem (sprawdzanie błędów)
+
+### Kompatybilność
+- WordPress 5.0+
+- PHP 7.4+
+- OpenAI API (GPT-3.5 do GPT-5.2, O1, O3)
+- WPML, Polylang, MultilingualPress
+
 ## [1.0.0] - 2025-01-25
 
 ### Dodane
